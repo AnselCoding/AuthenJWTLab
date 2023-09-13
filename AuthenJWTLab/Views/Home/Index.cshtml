@@ -1,0 +1,189 @@
+﻿@{
+    ViewData["Title"] = "Home Page";
+    var isUserLogin = ViewBag.user.Name != null;
+    var userNameTxt = (isUserLogin) ? ViewBag.user.Name : "未登入";
+    var useRoleTxt = (isUserLogin) ? ViewBag.user.Role : "未登入";
+    var displayLogin = (isUserLogin) ? "none" : "";
+    var displayLogout = (isUserLogin) ? "" : "none";
+}
+
+@* <div class="text-center">
+    <h1 class="display-4">Welcome</h1>
+    <p>Learn about <a href="https://docs.microsoft.com/aspnet/core">building Web apps with ASP.NET Core</a>.</p>
+</div> *@
+<p>
+    <span>使用者:<span id="userName">@userNameTxt</span></span>
+    <br />
+    <span>角色:<span id="userRole">@useRoleTxt</span></span>
+</p>
+<hr />
+
+<fieldset id="loginField" style="display:@displayLogin">
+    <legend>Login</legend>
+    <label>Name:</label>
+    <input type="text" name="name" id="name" value="Jhone">
+    <br />
+    <label>Password:</label>
+    <input type="text" name="pwd" id="pwd" value="pwd123">
+    <br />
+    <button id="btnLogin">Login</button>
+</fieldset>
+
+<div id="logoutField" style="display:@displayLogout">
+    <fieldset>
+        <legend>Logout</legend>
+        <button id="btnLogout">Logout</button>
+    </fieldset>
+    <fieldset>
+        <legend>Access token Expired. Refresh Unexpired.</legend>
+        <button id="btnRefreshToken">Keep Login</button>
+    </fieldset>
+</div>
+
+<hr />
+
+<fieldset>
+    <legend>Authorization</legend>
+    <button id="btnAdmin">Admin</button>
+    <button id="btnUser">User</button>    
+</fieldset>
+
+<script>
+    document.addEventListener("DOMContentLoaded", function (event) {
+        $("#btnLogin").click(
+            async function () {
+                let user = new User({
+                    name: $("#name").val(),
+                    password: $("#pwd").val()
+                })
+                let res = await fetchPromise("POST", "/api/AuthenJWT/Authenticate", user);
+                if (res.status == 404) alert("輸入有誤，查無使用者或密碼錯誤")
+                else if (res.status == 200) {
+                    alert("成功登入");
+                    let resp = await res.json();
+                    // 顯示使用者
+                    $("#userName").text(resp.user.name);
+                    $("#userRole").html(resp.user.role);
+                    // 隱藏登入區,顯示登出區
+                    $("#loginField").css("display", "none");
+                    $("#logoutField").css("display", "");
+
+                    localStorage.setItem("accessToken", resp.token.access_Token);
+                    localStorage.setItem("refreshToken", resp.token.refresh_Token);
+                }
+                else alert("錯誤發生，請聯絡管理員")
+            }
+        );
+
+        $("#btnRefreshToken").click(
+            async function () {
+                let token = new Token({
+                    access_Token: localStorage.getItem("accessToken"),
+                    refresh_Token: localStorage.getItem("refreshToken"),
+                });
+                let res = await fetchPromise("POST", "/api/AuthenJWT/RefreshJWTToken", token);
+                if (res.status == 200) {
+                    alert("成功刷新Token");
+                    let resp = await res.json();
+                    localStorage.setItem("accessToken", resp.access_Token);
+                    localStorage.setItem("refreshToken", resp.refresh_Token);
+                }
+                else if (res.status == 400) alert("Access Token 有誤")
+                else if (res.status == 401) alert("Refresh Token 失效")
+                else alert("錯誤發生，請聯絡管理員")
+            }
+        );
+
+        $("#btnAdmin").click(
+            async function () {
+                console.log("btnAdmin clicked");
+                let res = await fetchPromise("GET", "/api/Users/AdminCheck");
+                if (res.status == 200) alert("擁有 Admin 權限");
+                else if (res.status == 401) alert("未登入或 Access Token 已過期");
+                else if (res.status == 403) alert("沒有權限");
+                else alert("錯誤發生，請聯絡管理員");
+            }
+        );
+        $("#btnUser").click(
+            async function () {
+                console.log("btnUser clicked");
+                let res = await fetchPromise("GET", "/api/Users/UserCheck");
+                if (res.status == 200) alert("擁有 User 權限");
+                else if (res.status == 401) alert("未登入或 Access Token 已過期");
+                else if (res.status == 403) alert("沒有權限");
+                else alert("錯誤發生，請聯絡管理員");
+            }
+        );
+
+
+        $("#btnLogout").click(
+            async function () {
+                console.log("btnLogout clicked");
+
+                localStorage.removeItem("accessToken");
+                localStorage.removeItem("refreshToken");
+
+                alert("成功登出");
+                // 顯示未登入
+                $("#userName").text("未登入");
+                $("#userRole").html("未登入");
+                // 顯示登入區,隱藏登出區
+                $("#loginField").css("display", "");
+                $("#logoutField").css("display", "none");
+            }
+        );
+    });
+</script>
+
+@* Fetch Api *@
+<script>
+    // 前後Server相同
+    function getHost() {
+        var url = window.location.href;
+        var arr = url.split("/");
+        return arr[0] + "//" + arr[2]
+    }
+    const apiResourceName = getHost();
+    /**
+     * {string} httpMethod 'GET'or'POST'
+     * {string} path 要呼叫的 api 網址 path (如果是GET可能還會有 query string 參數部分) ex:/api...
+     * {*} data Body POST 要傳遞的資訊
+     */
+    async function fetchPromise( httpMethod, path, data = {}) {
+        var RequestInit = {
+            method: `${httpMethod}`,
+            headers: { 
+                'Content-Type': 'application/json', 
+                // 'Authorization': `${localStorage.getItem("accessToken")}`
+                'Authorization': `Bearer ${localStorage.getItem("accessToken")}`
+            }
+        };
+
+        if (httpMethod.toUpperCase() == 'POST') {
+            var bodyData = (data == null) ? {} : data;
+            RequestInit.body = JSON.stringify(bodyData);
+        }
+
+        return await fetch(`${apiResourceName}${path}`, RequestInit);
+    }
+</script>
+
+@* Models *@
+<script>
+    class User {
+        constructor(data) {
+            this.Id = (data.id != null) ? data.id : 0;
+            this.Name = (data.name != null) ? data.name : "";
+            this.MobilePhone = (data.mobilePhone != null) ? data.mobilePhone : "";
+            this.Role = (data.role != null) ? data.role : "";
+            this.Password = (data.password != null) ? data.password : "";
+            this.Email = (data.email != null) ? data.email : "";
+        }
+    }
+    class Token {
+        constructor(data) {
+            this.Access_Token = (data.access_Token != null) ? data.access_Token : "";
+            this.Refresh_Token = (data.refresh_Token != null) ? data.refresh_Token : "";
+        }
+    }
+</script>
