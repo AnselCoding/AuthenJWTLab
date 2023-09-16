@@ -20,8 +20,12 @@ namespace AuthenJWTLab.Repository
 
         public async Task<Token> GenerateJWTTokens(User user)
         {
-            _ = int.TryParse(_configuration["JWT:AccessExpireMin"], out var accessExpireMin);
-            _ = int.TryParse(_configuration["JWT:RefreshExpireMin"], out var refreshExpireMin);
+            //_ = int.TryParse(_configuration["JWT:AccessExpireMin"], out var accessExpireMin);
+            //_ = int.TryParse(_configuration["JWT:RefreshExpireMin"], out var refreshExpireMin);
+
+            // 讀取組態並轉型
+            var accessExpireMin = _configuration.GetSection("JWT:AccessExpireMin").Get<int>();
+            var refreshExpireMin = _configuration.GetSection("JWT:RefreshExpireMin").Get<int>();
 
             var accessToken = GenerateToken(user, accessExpireMin, false); // 使用Expires參數生成 accessToken
             var refreshToken = GenerateToken(user, refreshExpireMin, true); // 使用Expires參數生成 refreshToken
