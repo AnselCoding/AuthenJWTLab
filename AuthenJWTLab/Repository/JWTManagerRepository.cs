@@ -1,4 +1,6 @@
 ﻿using AuthenJWTLab.Models;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
@@ -11,11 +13,15 @@ namespace AuthenJWTLab.Repository
         private readonly IConfiguration _configuration;
         private readonly IRepository<UserRefreshToken> _userRefreshTokenDb;
         private readonly LabDBContext _context;
-        public JWTManagerRepository(IConfiguration configuration, IRepository<UserRefreshToken> repository, LabDBContext context)
+        private readonly JwtBearerOptions _jwtOptions;
+        private readonly SecurityKey _jwtSymmetricSecurityKey; // 統一取用在驗證機制中設置的 SecurityKey
+        public JWTManagerRepository(IConfiguration configuration, IRepository<UserRefreshToken> repository, LabDBContext context, IOptionsMonitor<JwtBearerOptions> jwtOptions)
         {
             _configuration = configuration;
             _userRefreshTokenDb = repository;
             _context = context;
+            _jwtOptions = jwtOptions.Get("Bearer");
+            _jwtSymmetricSecurityKey = _jwtOptions.TokenValidationParameters.IssuerSigningKey;
         }
 
         public async Task<Token> GenerateJWTTokens(User user)
@@ -47,12 +53,14 @@ namespace AuthenJWTLab.Repository
         private String GenerateToken(User user, int expMin, bool isRefreshToken)
         {
             var tokenHandler = new JwtSecurityTokenHandler();
-            var key = Encoding.UTF8.GetBytes(_configuration["JWT:Key"]);
+            //var key = Encoding.UTF8.GetBytes(_configuration["JWT:Key"]);
             var subject = new ClaimsIdentity(new[]
                 {
-                    new Claim("Id", user.Id.ToString()),
+                    //new Claim("Id", user.Id.ToString()),
+                    new Claim("userId", "4"),
+                    new Claim("source", "Wiiyo"),
                     new Claim(ClaimTypes.Name, user.Name),
-                    new Claim(ClaimTypes.Role, user.Role),
+                    new Claim(ClaimTypes.Role, "CS"),
 		            // 添加其他需要的身份信息
 		        });
 
@@ -60,7 +68,8 @@ namespace AuthenJWTLab.Repository
             {
                 Subject = subject,
                 Expires = DateTime.Now.AddMinutes(expMin), // AddJwtBearer 中 ValidateLifetime 必須啟用
-                SigningCredentials = new SigningCredentials(new SymmetricSecurityKey(key), SecurityAlgorithms.HmacSha256Signature),
+                //SigningCredentials = new SigningCredentials(new SymmetricSecurityKey(key), SecurityAlgorithms.HmacSha256Signature),
+                SigningCredentials = new SigningCredentials(_jwtSymmetricSecurityKey, SecurityAlgorithms.HmacSha256Signature),
                 Issuer = _configuration["JWT:Issuer"], // 如果有啟用 Issuer 驗證，需要攜帶 Issuer 資訊
                 Audience = _configuration["JWT:Audience"] // 如果有啟用 Audience 驗證，需要攜帶 Audience 資訊
             };
@@ -117,7 +126,8 @@ namespace AuthenJWTLab.Repository
                 ValidAudience = _configuration["JWT:Audience"],
                 ValidateLifetime = false, // 是從過期的 token 取資料，所以不驗證期限
                 ValidateIssuerSigningKey = true, // 令牌的金鑰。
-                IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["JWT:Key"])) // 設置令牌的金鑰。
+                //IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["JWT:Key"])) // 設置令牌的金鑰。
+                IssuerSigningKey = _jwtSymmetricSecurityKey // 設置令牌的金鑰。
             };
             ClaimsPrincipal principal = JwtSecurityToken(token, tokenValidationParameters);
             return principal;
@@ -139,7 +149,8 @@ namespace AuthenJWTLab.Repository
                 ValidIssuer = _configuration["JWT:Issuer"],
                 ValidAudience = _configuration["JWT:Audience"],
                 ValidateIssuerSigningKey = true, // 令牌的金鑰。
-                IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["JWT:Key"])) // 設置令牌的金鑰。
+                //IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["JWT:Key"])) // 設置令牌的金鑰。
+                IssuerSigningKey = _jwtSymmetricSecurityKey // 設置令牌的金鑰。
             };
             try
             {
